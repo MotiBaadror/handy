@@ -1,7 +1,13 @@
-.PHONY: run install lint format clean
+.PHONY: run chat dev install lint format clean
 
 run:
 	uv run python main.py
+
+chat:
+	uv run python client.py
+
+dev:
+	uv run watchfiles "python client.py" src/ client.py
 
 install:
 	uv sync

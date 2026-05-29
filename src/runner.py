@@ -45,8 +45,9 @@ class Runner:
                     else:
                         action = ShellAction(**args)
                         observation = tool.run(action)
-                        result = observation.output or f"exit code: {observation.exit_code}"
-                        print(f"[result: exit_code={observation.exit_code}]")
+                        result = f"{observation.output}\n[exit code: {observation.exit_code}]"
+                        print(f"[output: {observation.output.strip() or '(empty)'}]")
+                        print(f"[exit code: {observation.exit_code}]")
 
                     # feed result back to LLM as tool message
                     self.history.append({
