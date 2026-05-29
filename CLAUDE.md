@@ -43,6 +43,12 @@ Example:
  because the model gets no signal that it needs to produce an action or a reply"
 ```
 
+## Backlog (known gaps, not implemented yet)
+
+1. **Sandbox the shell tool** — currently runs commands directly on local machine, no restrictions
+2. **Handle model_validate failure** — what happens when the LLM returns bad tool arguments and Pydantic rejects them
+3. **Action type hardcoded in Runner** — `ShellAction(**args)` assumes only one tool; each tool should build its own action from args
+
 ## Learning notes
 
 Full learning notes live in the openhands-sdk repo at
