@@ -28,7 +28,12 @@ class Runner:
                 print("[tool call received — not implemented yet]")
                 return None
 
+            elif response.type == "reasoning":
+                # model is mid-thought, no visible content yet — nudge and loop again
+                print("[reasoning only — nudging model]")
+                self.history.append({"role": "user", "content": NUDGE})
+
             elif response.type == "empty":
-                # nudge the model and loop again
+                # completely empty response — nudge and loop again
                 print("[empty response — nudging model]")
                 self.history.append({"role": "user", "content": NUDGE})

@@ -11,5 +11,5 @@ brain = Brain(
 )
 
 runner = Runner(brain=brain)
-runner.send("What is 2 + 2? Answer in one sentence.")
+runner.send("List the files in the current directory.")
 runner.run()

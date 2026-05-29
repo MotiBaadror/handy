@@ -27,4 +27,8 @@ class Brain:
         if content and content.strip():
             return Response(type="content", content=content)
 
+        # reasoning models (e.g. deepseek, o1) emit thinking tokens with no visible content
+        if getattr(message, "reasoning_content", None):
+            return Response(type="reasoning")
+
         return Response(type="empty")
