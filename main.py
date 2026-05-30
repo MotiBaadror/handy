@@ -8,7 +8,7 @@ load_dotenv()
 
 brain = Brain(
     model=os.getenv("LLM_MODEL", "groq/llama-3.1-8b-instant"),
-    api_key=os.getenv("GROQ_API_KEY", ""),
+    api_key=os.getenv("LLM_API_KEY", ""),
     tools=[ShellTool.schema],
 )
 
