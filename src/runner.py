@@ -3,6 +3,7 @@ from pathlib import Path
 
 from .brain import Brain
 from .events import ActionEvent, Event, EventLog, MessageEvent, ObservationEvent
+from .secrets import SecretRegistry
 
 NUDGE = (
     "Your last response was empty. "
@@ -41,12 +42,13 @@ def _rebuild_history(events: list[Event]) -> list[dict]:
 
 
 class Runner:
-    def __init__(self, brain: Brain, tools: list | None = None, conversation_id: str = "default", history_turns: int = 0):
+    def __init__(self, brain: Brain, tools: list | None = None, conversation_id: str = "default", history_turns: int = 0, secrets: SecretRegistry | None = None):
         self.brain = brain
         self.history: list[dict] = []
         self.tools: dict = {t.name: t for t in (tools or [])}
         self.log = EventLog(Path("conversations") / conversation_id)
         self.history = _rebuild_history(self.log.load(last_n=history_turns))
+        self.secrets = secrets or SecretRegistry()
 
     def send(self, message: str) -> None:
         self.history.append({"role": "user", "content": message})
@@ -90,15 +92,16 @@ class Runner:
                         ))
                     else:
                         action = tool.build_action(args)
-                        observation = tool.run(action)
+                        observation = tool.run(action, env=self.secrets.as_env())
+                        masked_output = self.secrets.mask(observation.output)
                         prefix = "[ERROR] " if observation.is_error else ""
-                        result = f"{prefix}{observation.output}\n[exit code: {observation.exit_code}]"
-                        print(f"[output: {observation.output.strip() or '(empty)'}]")
+                        result = f"{prefix}{masked_output}\n[exit code: {observation.exit_code}]"
+                        print(f"[output: {masked_output.strip() or '(empty)'}]")
                         print(f"[exit code: {observation.exit_code}{'  ERROR' if observation.is_error else ''}]")
 
                         self.log.append(ObservationEvent(
                             tool_call_id=tc.id,
-                            output=observation.output,
+                            output=masked_output,
                             exit_code=observation.exit_code,
                             is_error=observation.is_error,
                         ))

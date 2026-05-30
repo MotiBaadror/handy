@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from src.brain import Brain
 from src.runner import Runner
 from src.registry import resolve_tools
+from src.secrets import SecretRegistry
 import src.tools  # noqa: F401 — triggers register_tool() at import
 
 load_dotenv()
@@ -19,7 +20,10 @@ brain = Brain(
     tools=[t.schema for t in tools],
 )
 
-runner = Runner(brain=brain, tools=tools, conversation_id=conversation_id, history_turns=history_turns)
+secrets = SecretRegistry()
+secrets.set("MY_TOKEN", os.getenv("MY_TOKEN", ""))
+
+runner = Runner(brain=brain, tools=tools, conversation_id=conversation_id, history_turns=history_turns, secrets=secrets)
 
 print(f"[conversation: {conversation_id}] [{len(runner.history)} messages loaded]\n")
 

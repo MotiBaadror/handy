@@ -39,12 +39,13 @@ class ShellTool:
     def build_action(self, args: dict) -> ShellAction:
         return ShellAction(**args)
 
-    def run(self, action: ShellAction) -> ShellObservation:
+    def run(self, action: ShellAction, env: dict | None = None) -> ShellObservation:
         result = subprocess.run(
             action.command,
             shell=True,
             capture_output=True,
             text=True,
+            env=env,
         )
         is_error = result.returncode != 0
         output = result.stderr if is_error else result.stdout
