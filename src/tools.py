@@ -1,5 +1,6 @@
 import subprocess
 from dataclasses import dataclass
+from .registry import register_tool
 
 
 @dataclass
@@ -11,6 +12,7 @@ class ShellAction:
 class ShellObservation:
     output: str
     exit_code: int
+    is_error: bool
 
 
 class ShellTool:
@@ -34,6 +36,9 @@ class ShellTool:
         },
     }
 
+    def build_action(self, args: dict) -> ShellAction:
+        return ShellAction(**args)
+
     def run(self, action: ShellAction) -> ShellObservation:
         result = subprocess.run(
             action.command,
@@ -41,5 +46,9 @@ class ShellTool:
             capture_output=True,
             text=True,
         )
-        output = result.stdout or result.stderr
-        return ShellObservation(output=output, exit_code=result.returncode)
+        is_error = result.returncode != 0
+        output = result.stderr if is_error else result.stdout
+        return ShellObservation(output=output, exit_code=result.returncode, is_error=is_error)
+
+
+register_tool(ShellTool())

@@ -1,6 +1,5 @@
 import json
 from .brain import Brain
-from .tools import ShellAction, ShellTool
 
 NUDGE = (
     "Your last response was empty. "
@@ -9,10 +8,10 @@ NUDGE = (
 
 
 class Runner:
-    def __init__(self, brain: Brain):
+    def __init__(self, brain: Brain, tools: list | None = None):
         self.brain = brain
         self.history: list[dict] = []
-        self.tools: dict[str, ShellTool] = {ShellTool.name: ShellTool()}
+        self.tools: dict = {t.name: t for t in (tools or [])}
 
     def send(self, message: str) -> None:
         self.history.append({"role": "user", "content": message})
@@ -27,13 +26,11 @@ class Runner:
                 return response.content
 
             elif response.type == "tool_call":
-                # add LLM's tool call to history
                 self.history.append({
                     "role": "assistant",
                     "tool_calls": [tc.model_dump() for tc in response.tool_calls],
                 })
 
-                # execute each tool call and add results to history
                 for tc in response.tool_calls:
                     tool_name = tc.function.name
                     args = json.loads(tc.function.arguments)
@@ -43,13 +40,13 @@ class Runner:
                     if tool is None:
                         result = f"Error: unknown tool '{tool_name}'"
                     else:
-                        action = ShellAction(**args)
+                        action = tool.build_action(args)
                         observation = tool.run(action)
-                        result = f"{observation.output}\n[exit code: {observation.exit_code}]"
+                        prefix = "[ERROR] " if observation.is_error else ""
+                        result = f"{prefix}{observation.output}\n[exit code: {observation.exit_code}]"
                         print(f"[output: {observation.output.strip() or '(empty)'}]")
-                        print(f"[exit code: {observation.exit_code}]")
+                        print(f"[exit code: {observation.exit_code}{'  ERROR' if observation.is_error else ''}]")
 
-                    # feed result back to LLM as tool message
                     self.history.append({
                         "role": "tool",
                         "tool_call_id": tc.id,

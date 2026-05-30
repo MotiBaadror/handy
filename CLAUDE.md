@@ -33,6 +33,22 @@ and original design.
 - **Failures drive additions.** Before adding code, understand what breaks without it.
   The commit message should describe that failure.
 
+## Learning and building process
+
+Before implementing anything new, follow this exact sequence:
+
+1. **Understand first** — read how the SDK does it, explain it clearly before touching code
+2. **Plan explicitly** — list every file that changes and why, wait for confirmation
+3. **Learn from the SDK's design** — ask "why did they build it this way?" before copying the pattern
+4. **Build the naive version first** — implement the simplest thing, run it, break it
+5. **Identify what breaks** — observe the failure, understand the root cause
+6. **Fix with understanding** — add only what's needed to fix the specific failure
+7. **Commit** — one concept, explain why in the message
+
+**Never skip step 1-3.** Jumping straight to code means missing important design
+decisions (like `is_error`, exit code context, image support) that only become
+obvious when you understand the full picture first.
+
 ## Commit message format
 
 ```
@@ -47,7 +63,9 @@ Example:
 
 1. **Sandbox the shell tool** — currently runs commands directly on local machine, no restrictions
 2. **Handle model_validate failure** — what happens when the LLM returns bad tool arguments and Pydantic rejects them
-3. **Action type hardcoded in Runner** — `ShellAction(**args)` assumes only one tool; each tool should build its own action from args
+3. ~~**Action type hardcoded in Runner**~~ — fixed, tools now injected and own their action via `build_action()`
+4. **Tool result format** — currently plain string; SDK supports `TextContent | ImageContent` for richer output (e.g. screenshots)
+5. **History explosion** — conversation history grows forever, no condensation or truncation yet
 
 ## Learning notes
 
