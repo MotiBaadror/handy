@@ -1,5 +1,8 @@
 import json
+from pathlib import Path
+
 from .brain import Brain
+from .events import ActionEvent, EventLog, MessageEvent, ObservationEvent
 
 NUDGE = (
     "Your last response was empty. "
@@ -8,13 +11,15 @@ NUDGE = (
 
 
 class Runner:
-    def __init__(self, brain: Brain, tools: list | None = None):
+    def __init__(self, brain: Brain, tools: list | None = None, log_dir: Path | None = None):
         self.brain = brain
         self.history: list[dict] = []
         self.tools: dict = {t.name: t for t in (tools or [])}
+        self.log = EventLog(log_dir or Path("conversations/default"))
 
     def send(self, message: str) -> None:
         self.history.append({"role": "user", "content": message})
+        self.log.append(MessageEvent(role="user", content=message))
 
     def run(self) -> str | None:
         while True:
@@ -22,6 +27,7 @@ class Runner:
 
             if response.type == "content":
                 self.history.append({"role": "assistant", "content": response.content})
+                self.log.append(MessageEvent(role="assistant", content=response.content))
                 print(f"Assistant: {response.content}")
                 return response.content
 
@@ -36,9 +42,21 @@ class Runner:
                     args = json.loads(tc.function.arguments)
                     print(f"[tool call: {tool_name}({args})]")
 
+                    self.log.append(ActionEvent(
+                        tool_name=tool_name,
+                        args=args,
+                        tool_call_id=tc.id,
+                    ))
+
                     tool = self.tools.get(tool_name)
                     if tool is None:
                         result = f"Error: unknown tool '{tool_name}'"
+                        self.log.append(ObservationEvent(
+                            tool_call_id=tc.id,
+                            output=result,
+                            exit_code=1,
+                            is_error=True,
+                        ))
                     else:
                         action = tool.build_action(args)
                         observation = tool.run(action)
@@ -46,6 +64,13 @@ class Runner:
                         result = f"{prefix}{observation.output}\n[exit code: {observation.exit_code}]"
                         print(f"[output: {observation.output.strip() or '(empty)'}]")
                         print(f"[exit code: {observation.exit_code}{'  ERROR' if observation.is_error else ''}]")
+
+                        self.log.append(ObservationEvent(
+                            tool_call_id=tc.id,
+                            output=observation.output,
+                            exit_code=observation.exit_code,
+                            is_error=observation.is_error,
+                        ))
 
                     self.history.append({
                         "role": "tool",
