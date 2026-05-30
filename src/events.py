@@ -44,6 +44,20 @@ class EventLog:
         existing = sorted(self.path.glob("event_*.json"))
         return len(existing)
 
+    def load(self) -> list[Event]:
+        files = sorted(self.path.glob("event_*.json"), key=lambda f: int(f.stem.split("_")[1]))
+        events = []
+        for f in files:
+            data = json.loads(f.read_text())
+            kind = data.pop("type")
+            if kind == "MessageEvent":
+                events.append(MessageEvent(**data))
+            elif kind == "ActionEvent":
+                events.append(ActionEvent(**data))
+            elif kind == "ObservationEvent":
+                events.append(ObservationEvent(**data))
+        return events
+
     def append(self, event: Event) -> Event:
         event.id = self._counter
         event.ts = time.time()

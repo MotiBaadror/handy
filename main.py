@@ -1,4 +1,5 @@
 import os
+import sys
 from dotenv import load_dotenv
 from src.brain import Brain
 from src.runner import Runner
@@ -6,6 +7,8 @@ from src.registry import resolve_tools
 import src.tools  # noqa: F401 — triggers register_tool() at import
 
 load_dotenv()
+
+conversation_id = sys.argv[1] if len(sys.argv) > 1 else "default"
 
 tools = resolve_tools()
 
@@ -15,6 +18,6 @@ brain = Brain(
     tools=[t.schema for t in tools],
 )
 
-runner = Runner(brain=brain, tools=tools)
+runner = Runner(brain=brain, tools=tools, conversation_id=conversation_id)
 runner.send("Count how many Python files are in the current directory.")
 runner.run()
