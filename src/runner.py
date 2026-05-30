@@ -41,12 +41,12 @@ def _rebuild_history(events: list[Event]) -> list[dict]:
 
 
 class Runner:
-    def __init__(self, brain: Brain, tools: list | None = None, conversation_id: str = "default"):
+    def __init__(self, brain: Brain, tools: list | None = None, conversation_id: str = "default", history_turns: int = 0):
         self.brain = brain
         self.history: list[dict] = []
         self.tools: dict = {t.name: t for t in (tools or [])}
         self.log = EventLog(Path("conversations") / conversation_id)
-        self.history = _rebuild_history(self.log.load())
+        self.history = _rebuild_history(self.log.load(last_n=history_turns))
 
     def send(self, message: str) -> None:
         self.history.append({"role": "user", "content": message})

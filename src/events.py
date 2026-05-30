@@ -44,8 +44,11 @@ class EventLog:
         existing = sorted(self.path.glob("event_*.json"))
         return len(existing)
 
-    def load(self) -> list[Event]:
+    def load(self, last_n: int = 0) -> list[Event]:
+        if last_n == 0:
+            return []
         files = sorted(self.path.glob("event_*.json"), key=lambda f: int(f.stem.split("_")[1]))
+        files = files[-last_n:]
         events = []
         for f in files:
             data = json.loads(f.read_text())
