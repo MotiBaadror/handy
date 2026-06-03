@@ -21,7 +21,6 @@ def _rebuild_history(events: list[Event]) -> list[dict]:
             history.append({"role": event.role, "content": event.content})
             i += 1
         elif isinstance(event, ActionEvent):
-            # consecutive ActionEvents belong to the same LLM response
             tool_calls = []
             while i < len(events) and isinstance(events[i], ActionEvent):
                 ae = events[i]
@@ -46,18 +45,66 @@ def _rebuild_history(events: list[Event]) -> list[dict]:
 
 
 class Runner:
-    def __init__(self, brain: Brain, tools: list | None = None, conversation_id: str = "default", history_turns: int = 0, secrets: SecretRegistry | None = None, max_messages: int = 20):
+    def __init__(self, brain: Brain, tools: list | None = None, conversation_id: str = "default", secrets: SecretRegistry | None = None, max_messages: int = 20, keep_first: int = 1, base_dir: Path = Path("conversations")):
         self.brain = brain
         self.history: list[dict] = []
         self.tools: dict = {t.name: t for t in (tools or [])}
-        self.log = EventLog(Path("conversations") / conversation_id)
-        self.history = _rebuild_history(self.log.load(last_n=history_turns))
+        self.log = EventLog(base_dir / conversation_id)
+        self.history = _rebuild_history(self.log.load(keep_first=keep_first))
         self.secrets = secrets or SecretRegistry()
-        self.condenser = Condenser(brain, log=self.log, max_messages=max_messages)
+        self.condenser = Condenser(brain, log=self.log, max_messages=max_messages, keep_first=keep_first)
 
     def send(self, message: str) -> None:
         self.history.append({"role": "user", "content": message})
         self.log.append(MessageEvent(role="user", content=message))
+
+    def _parse_args(self, tc) -> dict:
+        """Parse JSON arguments from a tool call. Raises json.JSONDecodeError on bad input."""
+        return json.loads(tc.function.arguments)
+
+    def _execute_tool(self, tool, args: dict, tool_call_id: str) -> str:
+        """Build action, run tool, mask output, log observation. Returns result string."""
+        action = tool.build_action(args)
+        observation = tool.run(action, env=self.secrets.as_env())
+        masked_output = self.secrets.mask(observation.output)
+        prefix = "[ERROR] " if observation.is_error else ""
+        result = f"{prefix}{masked_output}\n[exit code: {observation.exit_code}]"
+        print(f"[output: {masked_output.strip() or '(empty)'}]")
+        print(f"[exit code: {observation.exit_code}{'  ERROR' if observation.is_error else ''}]")
+        self.log.append(ObservationEvent(
+            tool_call_id=tool_call_id,
+            output=masked_output,
+            exit_code=observation.exit_code,
+            is_error=observation.is_error,
+        ))
+        return result
+
+    def _handle_tool_call(self, tc) -> str:
+        """Handle one tool call end-to-end. Returns result string, never raises."""
+        tool_name = tc.function.name
+
+        try:
+            args = self._parse_args(tc)
+        except Exception as e:
+            result = f"Error: could not parse tool arguments — {e}"
+            self.log.append(ObservationEvent(tool_call_id=tc.id, output=result, exit_code=1, is_error=True))
+            return result
+
+        print(f"[tool call: {tool_name}({args})]")
+        self.log.append(ActionEvent(tool_name=tool_name, args=args, tool_call_id=tc.id))
+
+        tool = self.tools.get(tool_name)
+        if tool is None:
+            result = f"Error: unknown tool '{tool_name}'"
+            self.log.append(ObservationEvent(tool_call_id=tc.id, output=result, exit_code=1, is_error=True))
+            return result
+
+        try:
+            return self._execute_tool(tool, args, tc.id)
+        except Exception as e:
+            result = f"Error: tool execution failed — {e}"
+            self.log.append(ObservationEvent(tool_call_id=tc.id, output=result, exit_code=1, is_error=True))
+            return result
 
     def run(self) -> str | None:
         self.history = self.condenser.maybe_condense(self.history)
@@ -75,43 +122,8 @@ class Runner:
                     "role": "assistant",
                     "tool_calls": [tc.model_dump() for tc in response.tool_calls],
                 })
-
                 for tc in response.tool_calls:
-                    tool_name = tc.function.name
-                    args = json.loads(tc.function.arguments)
-                    print(f"[tool call: {tool_name}({args})]")
-
-                    self.log.append(ActionEvent(
-                        tool_name=tool_name,
-                        args=args,
-                        tool_call_id=tc.id,
-                    ))
-
-                    tool = self.tools.get(tool_name)
-                    if tool is None:
-                        result = f"Error: unknown tool '{tool_name}'"
-                        self.log.append(ObservationEvent(
-                            tool_call_id=tc.id,
-                            output=result,
-                            exit_code=1,
-                            is_error=True,
-                        ))
-                    else:
-                        action = tool.build_action(args)
-                        observation = tool.run(action, env=self.secrets.as_env())
-                        masked_output = self.secrets.mask(observation.output)
-                        prefix = "[ERROR] " if observation.is_error else ""
-                        result = f"{prefix}{masked_output}\n[exit code: {observation.exit_code}]"
-                        print(f"[output: {masked_output.strip() or '(empty)'}]")
-                        print(f"[exit code: {observation.exit_code}{'  ERROR' if observation.is_error else ''}]")
-
-                        self.log.append(ObservationEvent(
-                            tool_call_id=tc.id,
-                            output=masked_output,
-                            exit_code=observation.exit_code,
-                            is_error=observation.is_error,
-                        ))
-
+                    result = self._handle_tool_call(tc)
                     self.history.append({
                         "role": "tool",
                         "tool_call_id": tc.id,

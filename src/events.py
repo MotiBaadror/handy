@@ -35,6 +35,7 @@ class ObservationEvent:
 class CondensationEvent:
     summary: str
     forgotten_count: int
+    summary_offset: int = 0  # position in reconstructed history where summary is inserted
     id: int = 0
     ts: float = 0.0
 
@@ -64,11 +65,10 @@ class EventLog:
         existing = sorted(self.path.glob("event_*.json"))
         return len(existing)
 
-    def load(self, last_n: int = 0) -> list[Event]:
-        if last_n == 0:
-            return []
-
+    def load(self, keep_first: int = 1) -> list[Event]:
         files = sorted(self.path.glob("event_*.json"), key=lambda f: int(f.stem.split("_")[1]))
+        if not files:
+            return []
 
         all_events = []
         for f in files:
@@ -78,17 +78,18 @@ class EventLog:
             if event:
                 all_events.append(event)
 
-        # if a condensation event exists, start from the last one — no point
-        # loading events that were already summarized
+        # find last condensation — no point loading events already summarized
         last_condensation = None
         for i, e in enumerate(all_events):
             if isinstance(e, CondensationEvent):
                 last_condensation = i
 
         if last_condensation is not None:
-            return all_events[last_condensation:]
+            # always prepend the protected events so they survive across sessions
+            protected = all_events[:keep_first]
+            return protected + all_events[last_condensation:]
 
-        return all_events[-last_n:]
+        return all_events
 
     def append(self, event: Event) -> Event:
         event.id = self._counter

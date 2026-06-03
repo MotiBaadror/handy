@@ -3,24 +3,34 @@ from .events import CondensationEvent, EventLog
 
 
 class Condenser:
-    def __init__(self, brain: Brain, log: EventLog, max_messages: int = 20):
+    def __init__(self, brain: Brain, log: EventLog, max_messages: int = 20, keep_first: int = 1):
         self.brain = brain
         self.log = log
         self.max_messages = max_messages
+        self.keep_first = keep_first  # how many leading messages to never summarize
 
     def maybe_condense(self, history: list[dict]) -> list[dict]:
         if len(history) <= self.max_messages:
             return history
 
+        protected = history[:self.keep_first]
+        condensable = history[self.keep_first:]
+
         keep = self.max_messages // 2
-        to_summarize = history[:-keep]
-        to_keep = history[-keep:]
+        cut = len(condensable) - keep
+
+        # snap cut back to nearest user message so we never split an action+observation pair
+        while cut > 0 and condensable[cut].get("role") != "user":
+            cut -= 1
+
+        to_summarize = condensable[:cut]
+        to_keep = condensable[cut:]
 
         summary = self._summarize(to_summarize)
-        self.log.append(CondensationEvent(summary=summary, forgotten_count=len(to_summarize)))
+        self.log.append(CondensationEvent(summary=summary, forgotten_count=len(to_summarize), summary_offset=self.keep_first))
         print(f"[condenser: {len(to_summarize)} messages → summary]")
 
-        return [{"role": "user", "content": f"[Summary of earlier conversation]: {summary}"}] + to_keep
+        return protected + [{"role": "user", "content": f"[Summary of earlier conversation]: {summary}"}] + to_keep
 
     def _summarize(self, messages: list[dict]) -> str:
         formatted = _format(messages)
