@@ -31,7 +31,27 @@ class ObservationEvent:
     ts: float = 0.0
 
 
-Event = MessageEvent | ActionEvent | ObservationEvent
+@dataclass
+class CondensationEvent:
+    summary: str
+    forgotten_count: int
+    id: int = 0
+    ts: float = 0.0
+
+
+Event = MessageEvent | ActionEvent | ObservationEvent | CondensationEvent
+
+
+def _parse_event(kind: str, data: dict) -> Event | None:
+    if kind == "MessageEvent":
+        return MessageEvent(**data)
+    elif kind == "ActionEvent":
+        return ActionEvent(**data)
+    elif kind == "ObservationEvent":
+        return ObservationEvent(**data)
+    elif kind == "CondensationEvent":
+        return CondensationEvent(**data)
+    return None
 
 
 class EventLog:
@@ -47,19 +67,28 @@ class EventLog:
     def load(self, last_n: int = 0) -> list[Event]:
         if last_n == 0:
             return []
+
         files = sorted(self.path.glob("event_*.json"), key=lambda f: int(f.stem.split("_")[1]))
-        files = files[-last_n:]
-        events = []
+
+        all_events = []
         for f in files:
             data = json.loads(f.read_text())
             kind = data.pop("type")
-            if kind == "MessageEvent":
-                events.append(MessageEvent(**data))
-            elif kind == "ActionEvent":
-                events.append(ActionEvent(**data))
-            elif kind == "ObservationEvent":
-                events.append(ObservationEvent(**data))
-        return events
+            event = _parse_event(kind, data)
+            if event:
+                all_events.append(event)
+
+        # if a condensation event exists, start from the last one — no point
+        # loading events that were already summarized
+        last_condensation = None
+        for i, e in enumerate(all_events):
+            if isinstance(e, CondensationEvent):
+                last_condensation = i
+
+        if last_condensation is not None:
+            return all_events[last_condensation:]
+
+        return all_events[-last_n:]
 
     def append(self, event: Event) -> Event:
         event.id = self._counter

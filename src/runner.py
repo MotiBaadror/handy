@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 
 from .brain import Brain
-from .events import ActionEvent, Event, EventLog, MessageEvent, ObservationEvent
+from .condenser import Condenser
+from .events import ActionEvent, CondensationEvent, Event, EventLog, MessageEvent, ObservationEvent
 from .secrets import SecretRegistry
 
 NUDGE = (
@@ -38,23 +39,28 @@ def _rebuild_history(events: list[Event]) -> list[dict]:
                 "content": event.output,
             })
             i += 1
+        elif isinstance(event, CondensationEvent):
+            history.append({"role": "user", "content": f"[Summary of earlier conversation]: {event.summary}"})
+            i += 1
     return history
 
 
 class Runner:
-    def __init__(self, brain: Brain, tools: list | None = None, conversation_id: str = "default", history_turns: int = 0, secrets: SecretRegistry | None = None):
+    def __init__(self, brain: Brain, tools: list | None = None, conversation_id: str = "default", history_turns: int = 0, secrets: SecretRegistry | None = None, max_messages: int = 20):
         self.brain = brain
         self.history: list[dict] = []
         self.tools: dict = {t.name: t for t in (tools or [])}
         self.log = EventLog(Path("conversations") / conversation_id)
         self.history = _rebuild_history(self.log.load(last_n=history_turns))
         self.secrets = secrets or SecretRegistry()
+        self.condenser = Condenser(brain, log=self.log, max_messages=max_messages)
 
     def send(self, message: str) -> None:
         self.history.append({"role": "user", "content": message})
         self.log.append(MessageEvent(role="user", content=message))
 
     def run(self) -> str | None:
+        self.history = self.condenser.maybe_condense(self.history)
         while True:
             response = self.brain.call(self.history)
 

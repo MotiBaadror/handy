@@ -11,6 +11,7 @@ load_dotenv()
 
 conversation_id = sys.argv[1] if len(sys.argv) > 1 else "default"
 history_turns = int(os.getenv("HISTORY_TURNS", "0"))
+max_messages = int(os.getenv("MAX_MESSAGES", "20"))
 
 tools = resolve_tools()
 
@@ -23,7 +24,7 @@ brain = Brain(
 secrets = SecretRegistry()
 secrets.set("MY_TOKEN", os.getenv("MY_TOKEN", ""))
 
-runner = Runner(brain=brain, tools=tools, conversation_id=conversation_id, history_turns=history_turns, secrets=secrets)
+runner = Runner(brain=brain, tools=tools, conversation_id=conversation_id, history_turns=history_turns, secrets=secrets, max_messages=max_messages)
 
 print(f"[conversation: {conversation_id}] [{len(runner.history)} messages loaded]\n")
 
