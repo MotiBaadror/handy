@@ -4,6 +4,7 @@ from pathlib import Path
 from .brain import Brain
 from .condenser import Condenser
 from .events import ActionEvent, CondensationEvent, Event, EventLog, MessageEvent, ObservationEvent
+from .rails import check as rail_check
 from .secrets import SecretRegistry
 
 NUDGE = (
@@ -99,6 +100,14 @@ class Runner:
             result = f"Error: unknown tool '{tool_name}'"
             self.log.append(ObservationEvent(tool_call_id=tc.id, output=result, exit_code=1, is_error=True))
             return result
+
+        # check policy rails before executing
+        command = args.get("command", "")
+        blocked = rail_check(command)
+        if blocked:
+            print(f"[rails: {blocked}]")
+            self.log.append(ObservationEvent(tool_call_id=tc.id, output=blocked, exit_code=1, is_error=True))
+            return blocked
 
         try:
             return self._execute_tool(tool, args, tc.id)
