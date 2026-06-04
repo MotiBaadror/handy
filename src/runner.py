@@ -45,7 +45,7 @@ def _rebuild_history(events: list[Event]) -> list[dict]:
 
 
 class Runner:
-    def __init__(self, brain: Brain, tools: list | None = None, conversation_id: str = "default", secrets: SecretRegistry | None = None, max_messages: int = 20, keep_first: int = 1, base_dir: Path = Path("conversations")):
+    def __init__(self, brain: Brain, tools: list | None = None, conversation_id: str = "default", secrets: SecretRegistry | None = None, max_messages: int = 20, keep_first: int = 1, max_iterations: int = 50, base_dir: Path = Path("conversations")):
         self.brain = brain
         self.history: list[dict] = []
         self.tools: dict = {t.name: t for t in (tools or [])}
@@ -53,6 +53,7 @@ class Runner:
         self.history = _rebuild_history(self.log.load(keep_first=keep_first))
         self.secrets = secrets or SecretRegistry()
         self.condenser = Condenser(brain, log=self.log, max_messages=max_messages, keep_first=keep_first)
+        self.max_iterations = max_iterations
 
     def send(self, message: str) -> None:
         self.history.append({"role": "user", "content": message})
@@ -108,7 +109,12 @@ class Runner:
 
     def run(self) -> str | None:
         self.history = self.condenser.maybe_condense(self.history)
+        iteration = 0
         while True:
+            if iteration >= self.max_iterations:
+                print(f"[max iterations ({self.max_iterations}) reached — stopping]")
+                return None
+            iteration += 1
             response = self.brain.call(self.history)
 
             if response.type == "content":
